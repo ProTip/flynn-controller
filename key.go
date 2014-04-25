@@ -32,10 +32,22 @@ func (r *KeyRepo) Add(data interface{}) error {
 	}
 
 	key.ID = fingerprintKey(pubKey.Marshal())
-	key.Key = string(bytes.TrimSpace(ssh.MarshalAuthorizedKey(pubKey)))
-	key.Comment = comment
 
-	return r.db.QueryRow("INSERT INTO keys (key_id, key, comment) VALUES ($1, $2, $3) RETURNING created_at", key.ID, key.Key, key.Comment).Scan(&key.CreatedAt)
+	// Check for existing key
+	err = r.db.QueryRow("SELECT key_id, key, comment, created_at, deleted_at FROM keys WHERE key_id = $1", key.ID).Scan(&key.ID, &key.Key, &key.Comment, &key.CreatedAt, &key.DeletedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Key doesn't exist so insert it
+			key.Key = string(bytes.TrimSpace(ssh.MarshalAuthorizedKey(pubKey)))
+			key.Comment = comment
+			return r.db.QueryRow("INSERT INTO keys (key_id, key, comment) VALUES ($1, $2, $3) RETURNING created_at", key.ID, key.Key, key.Comment).Scan(&key.CreatedAt)
+		}
+		return err
+	}
+	if key.DeletedAt == nil {
+		return errors.New("controller: key already exists")
+	}
+	return r.db.QueryRow("UPDATE keys SET created_at = now(), deleted_at = NULL WHERE key_id = $1 RETURNING created_at", key.ID).Scan(&key.CreatedAt)
 }
 
 func fingerprintKey(key []byte) string {

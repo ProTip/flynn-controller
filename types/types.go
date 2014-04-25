@@ -61,6 +61,7 @@ type Key struct {
 	Key       string     `json:"key,omitempty"`
 	Comment   string     `json:"comment,omitempty"`
 	CreatedAt *time.Time `json:"created_at,omitempty"`
+	DeletedAt *time.Time `json:"-"`
 }
 
 type Job struct {
